@@ -42,7 +42,7 @@ type Task struct {
 	// 操作阶段：map/reduce
 	TaskPhase TaskPhase
 	// map个数
-	MapNum    int
+	MapNum int
 	// reduce个数
 	ReduceNum int
 	// 任务序号

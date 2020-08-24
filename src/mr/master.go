@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 	"fmt"
+	"os"
 )
 
 // 任务状态
@@ -68,9 +69,11 @@ func MakeMaster(files []string, nReduce int) *Master {
 func (m *Master) server() {
 	rpc.Register(m)
 	rpc.HandleHTTP()
-	l, e := net.Listen("tcp", "127.0.0.1:1234")
-	//os.Remove("mr-socket")
-	//l, e := net.Listen("unix", "mr-socket")
+	// windows下使用tcp
+	//l, e := net.Listen("tcp", "127.0.0.1:1234")
+	// linux下使用unix
+	os.Remove("mr-socket")
+	l, e := net.Listen("unix", "mr-socket")
 	if e != nil {
 		log.Fatal("listen error:", e)
 	}
@@ -84,10 +87,15 @@ func (m *Master) HandleTaskReq(args *ReqTaskArgs, reply *ReqTaskReply) error {
 		var err error
 		return err
 	}
-	task := <-m.TaskChan
-	reply.Task = task
-	m.TaskState[task.TaskIndex].Status = TaskStatusRunning
-	m.TaskState[task.TaskIndex].StartTime = time.Now()
+
+	task, ok := <-m.TaskChan
+	if ok == true {
+		reply.Task = task
+		m.TaskState[task.TaskIndex].Status = TaskStatusRunning
+		m.TaskState[task.TaskIndex].StartTime = time.Now()
+	} else {
+		reply.TaskDone = true
+	}
 	return nil
 }
 
@@ -140,6 +148,7 @@ func (m *Master) Done() bool {
 			m.initReduceTask()
 		} else {
 			m.IsDone = true
+			close(m.TaskChan)
 		}
 	} else {
 		m.IsDone = false
@@ -185,4 +194,3 @@ func (m *Master) checkTask(taskIndex int) {
 		m.addTask(taskIndex)
 	}
 }
-

@@ -40,6 +40,7 @@ func Worker(mapf func(string, string) []KeyValue,
 		reply := ReqTaskReply{}
 		reply = reqTask()
 		if reply.TaskDone {
+			fmt.Println("无任务可获取,停止worker...")
 			break
 		}
 		// 执行任务
@@ -63,7 +64,10 @@ func reqTask() ReqTaskReply {
 
 	// RPC调用
 	if ok := call("Master.HandleTaskReq", &args, &reply); !ok {
-		log.Fatal("request for task fail...")
+		//log.Fatal("request for task fail...")
+		log.Println("request for task fail...")
+		reply.TaskDone = true
+		return reply
 	}
 
 	return reply
@@ -81,7 +85,7 @@ func reportTask(taskIndex int, isDone bool) ReportTaskReply {
 
 	// RPC调用
 	if ok := call("Master.HandleTaskReport", &args, &reply); !ok {
-		log.Fatal("request for task fail...")
+		log.Fatal("report task fail...")
 	}
 	return reply
 
@@ -194,8 +198,10 @@ func DoReduceTask(reducef func(string, []string) string, mapNum int, reduceTaskI
 // returns false if something goes wrong.
 //
 func call(rpcname string, args interface{}, reply interface{}) bool {
-	c, err := rpc.DialHTTP("tcp", "127.0.0.1"+":1234")
-	//c, err := rpc.DialHTTP("unix", "mr-socket")
+	// windows下使用tcp
+	//c, err := rpc.DialHTTP("tcp", "127.0.0.1"+":1234")
+	// linux下使用unix
+	c, err := rpc.DialHTTP("unix", "mr-socket")
 	if err != nil {
 		log.Fatal("dialing:", err)
 	}
