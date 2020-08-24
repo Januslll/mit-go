@@ -1,3 +1,4 @@
+// mrworker.go
 package main
 
 //
@@ -20,8 +21,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	// 加载map和reduce方法
 	mapf, reducef := loadPlugin(os.Args[1])
 
+	// 调用worker.go的worker方法
+	// 入参为map和reduce方法
 	mr.Worker(mapf, reducef)
 }
 
