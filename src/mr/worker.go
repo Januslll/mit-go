@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"strconv"
 	"sort"
+	"errors"
 )
 
 //
@@ -40,7 +41,6 @@ func Worker(mapf func(string, string) []KeyValue,
 		reply := ReqTaskReply{}
 		reply = reqTask()
 		if reply.TaskDone {
-			fmt.Println("无任务可获取,停止worker...")
 			break
 		}
 		// 执行任务
@@ -64,10 +64,7 @@ func reqTask() ReqTaskReply {
 
 	// RPC调用
 	if ok := call("Master.HandleTaskReq", &args, &reply); !ok {
-		//log.Fatal("request for task fail...")
-		log.Println("request for task fail...")
-		reply.TaskDone = true
-		return reply
+		log.Fatal("请求任务失败...")
 	}
 
 	return reply
@@ -85,7 +82,7 @@ func reportTask(taskIndex int, isDone bool) ReportTaskReply {
 
 	// RPC调用
 	if ok := call("Master.HandleTaskReport", &args, &reply); !ok {
-		log.Fatal("report task fail...")
+		log.Fatal("报告任务失败...")
 	}
 	return reply
 
@@ -100,9 +97,8 @@ func doTask(mapf func(string, string) []KeyValue, reducef func(string, []string)
 		err := DoReduceTask(reducef, task.MapNum, task.TaskIndex)
 		return err
 	} else {
-		var err error
-		log.Fatal("the task phase is not map or reduce,can't executing task...")
-		return err
+		log.Fatal("请求任务的任务阶段返回值异常...")
+		return errors.New("请求任务的任务阶段返回值异常")
 	}
 	return nil
 }
@@ -158,6 +154,7 @@ func DoReduceTask(reducef func(string, []string) string, mapNum int, reduceTaskI
 		}
 		// 反序列化JSON格式文件
 		dec := json.NewDecoder(file)
+		// 读取文件内容
 		for {
 			var kv KeyValue
 			err := dec.Decode(&kv)
@@ -198,10 +195,8 @@ func DoReduceTask(reducef func(string, []string) string, mapNum int, reduceTaskI
 // returns false if something goes wrong.
 //
 func call(rpcname string, args interface{}, reply interface{}) bool {
-	// windows下使用tcp
-	//c, err := rpc.DialHTTP("tcp", "127.0.0.1"+":1234")
-	// linux下使用unix
-	c, err := rpc.DialHTTP("unix", "mr-socket")
+	c, err := rpc.DialHTTP("tcp", "127.0.0.1"+":1234")
+	//c, err := rpc.DialHTTP("unix", "mr-socket")
 	if err != nil {
 		log.Fatal("dialing:", err)
 	}
@@ -216,9 +211,7 @@ func call(rpcname string, args interface{}, reply interface{}) bool {
 	return false
 }
 
-//
 // 中间文件名
-//
 func intermediateName(mapTaskIndex int, reduceTaskIndex int) string {
 
 	var fileName string
@@ -226,9 +219,7 @@ func intermediateName(mapTaskIndex int, reduceTaskIndex int) string {
 	return fileName
 }
 
-//
 // 输出文件名
-//
 func outputName(reduceTaskIndex int) string {
 	var fileName string
 	fileName = "mr-out-" + strconv.Itoa(reduceTaskIndex)

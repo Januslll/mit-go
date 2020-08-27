@@ -10,18 +10,20 @@ import (
 	"time"
 	"fmt"
 	"os"
+	"errors"
 )
 
-// 任务状态
+// 任务状态定义
 type TaskState struct {
+	// 状态
 	Status TaskStatus
-
+	// 开始执行时间
 	StartTime time.Time
 }
 
+// Master结构定义
 type Master struct {
-	// Your definitions here.
-	//
+	// 任务队列
 	TaskChan chan Task
 	// 输入文件
 	Files []string
@@ -33,15 +35,13 @@ type Master struct {
 	TaskPhase TaskPhase
 	// 任务状态
 	TaskState []TaskState
-	// 锁
+	// 互斥锁
 	Mutex sync.Mutex
 	// 是否完成
 	IsDone bool
 }
 
-//
-// 创建Master
-//
+// 启动Master
 func MakeMaster(files []string, nReduce int) *Master {
 	m := Master{}
 
@@ -63,15 +63,11 @@ func MakeMaster(files []string, nReduce int) *Master {
 	return &m
 }
 
-//
 // 启动一个线程监听worker.go的RPC请求
-//
 func (m *Master) server() {
 	rpc.Register(m)
 	rpc.HandleHTTP()
-	// windows下使用tcp
 	//l, e := net.Listen("tcp", "127.0.0.1:1234")
-	// linux下使用unix
 	os.Remove("mr-socket")
 	l, e := net.Listen("unix", "mr-socket")
 	if e != nil {
@@ -84,16 +80,18 @@ func (m *Master) server() {
 func (m *Master) HandleTaskReq(args *ReqTaskArgs, reply *ReqTaskReply) error {
 	fmt.Println("开始处理任务请求...")
 	if !args.WorkerStatus {
-		var err error
-		return err
+		return errors.New("当前worker已下线")
 	}
-
+	// 任务出队列
 	task, ok := <-m.TaskChan
 	if ok == true {
 		reply.Task = task
+		// 任务状态置为执行中
 		m.TaskState[task.TaskIndex].Status = TaskStatusRunning
+		// 记录任务开始执行时间
 		m.TaskState[task.TaskIndex].StartTime = time.Now()
 	} else {
+		// 若队列中已经没有任务，则任务全部完成，结束
 		reply.TaskDone = true
 	}
 	return nil
@@ -103,22 +101,21 @@ func (m *Master) HandleTaskReq(args *ReqTaskArgs, reply *ReqTaskReply) error {
 func (m *Master) HandleTaskReport(args *ReportTaskArgs, reply *ReportTaskReply) error {
 	fmt.Println("开始处理任务报告...")
 	if !args.WorkerStatus {
-		var err error
 		reply.MasterAck = false
-		return err
+		return errors.New("当前worker已下线")
 	}
 	if args.IsDone == true {
+		// 任务已完成
 		m.TaskState[args.TaskIndex].Status = TaskStatusFinish
 	} else {
+		// 任务执行错误
 		m.TaskState[args.TaskIndex].Status = TaskStatusErr
 	}
 	reply.MasterAck = true
 	return nil
 }
 
-//
 // 循环调用 Done() 来判定任务是否完成
-//
 func (m *Master) Done() bool {
 	ret := false
 
@@ -128,22 +125,31 @@ func (m *Master) Done() bool {
 	for key, ts := range m.TaskState {
 		switch ts.Status {
 		case TaskStatusReady:
+			// 任务就绪
 			finished = false
 			m.addTask(key)
 		case TaskStatusQueue:
+			// 任务队列中
 			finished = false
 		case TaskStatusRunning:
+			// 任务执行中
 			finished = false
 			m.checkTask(key)
 		case TaskStatusFinish:
+			// 任务已完成
 		case TaskStatusErr:
+			// 任务错误
 			finished = false
 			m.addTask(key)
 		default:
-			panic("tasks status error...")
+			panic("任务状态异常...")
 		}
 	}
+	// 任务完成
 	if finished {
+		// 判断阶段
+		// map则初始化reduce阶段
+		// reduce则结束
 		if m.TaskPhase == MapPhase {
 			m.initReduceTask()
 		} else {
@@ -157,7 +163,7 @@ func (m *Master) Done() bool {
 	return ret
 }
 
-// 初始化reduce任务
+// 初始化reduce阶段
 func (m *Master) initReduceTask() {
 	m.TaskPhase = ReducePhase
 	m.IsDone = false
@@ -165,11 +171,11 @@ func (m *Master) initReduceTask() {
 	for k := range m.TaskState {
 		m.TaskState[k].Status = TaskStatusReady
 	}
-
 }
 
 // 将任务放入任务队列中
 func (m *Master) addTask(taskIndex int) {
+	// 构造任务信息
 	m.TaskState[taskIndex].Status = TaskStatusQueue
 	task := Task{
 		FileName:  "",

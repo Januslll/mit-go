@@ -13,10 +13,15 @@ type TimeDuration time.Duration
 
 // 任务状态常量
 const (
+	// 就绪
 	TaskStatusReady   TaskStatus = "ready"
+	// 队列中
 	TaskStatusQueue   TaskStatus = "queue"
+	// 执行中
 	TaskStatusRunning TaskStatus = "running"
+	// 已完成
 	TaskStatusFinish  TaskStatus = "finish"
+	// 任务错误
 	TaskStatusErr     TaskStatus = "error"
 )
 
